@@ -1,21 +1,19 @@
 require 'active_support/core_ext/object/try'
 require 'active_support/inflector'
 require_relative './db_connection.rb'
-
+require 'debugger'
 class AssocParams
   def other_class
     @other_class_name.constantize
   end
 
   def other_table
-    p self.other_class
     self.other_class.table_name
   end
 end
 
 class BelongsToAssocParams < AssocParams
   attr_reader :primary_key, :foreign_key
-  attr_reader :other_table_name
   def initialize(name, params)
     @other_class_name = params[:class_name] || name.to_s.camelize
     @primary_key = params[:primary_key] || :id
@@ -42,16 +40,16 @@ end
 
 module Associatable
   def assoc_params
-    @assoc_params || {}
+    @assoc_params || @assoc_params = {}
   end
 
   def belongs_to(name, params = {})
     # self -> class
-    assoc_params[name] = BelongsToAssocParams.new(name,params)
+    ap = self.assoc_params
+    ap[name] = BelongsToAssocParams.new(name,params)
     aparams = BelongsToAssocParams.new(name, params)
     self.send(:define_method, name) do
       # self -> instance
-
 
       my_sql = <<-SQL
       SELECT "#{aparams.other_table}".* FROM #{aparams.other_table}
@@ -65,9 +63,10 @@ module Associatable
   end
 
   def has_many(name, params = {})
+    ap = self.assoc_params
+    ap[name] = HasManyAssocParams.new(name, params)
     aparams = HasManyAssocParams.new(name, params)
     self.send(:define_method, name) do
-
 
       row = DBConnection.execute(<<-SQL)
       SELECT "#{aparams.other_table}".* FROM #{aparams.other_table}
@@ -80,6 +79,20 @@ module Associatable
   end
 
   def has_one_through(name, assoc1, assoc2)
+    assoc1_pa = assoc_params[assoc1]
+    self.send(:define_method, name) do
 
+      assoc2_pa = assoc1_pa.other_class.assoc_params[assoc2]
+
+      sql_query = <<-SQL
+      SELECT "#{assoc2_pa.other_class.table_name}".*
+      FROM #{assoc2_pa.other_class.table_name}
+      JOIN #{assoc1_pa.other_class.table_name}
+      ON #{assoc2_pa.other_class.table_name}.#{assoc2_pa.primary_key}
+      = #{assoc1_pa.other_class.table_name}.#{assoc2_pa.foreign_key}
+      SQL
+      row = DBConnection.execute(sql_query)
+      assoc2_pa.other_class.parse_all(row)
+    end
   end
 end
