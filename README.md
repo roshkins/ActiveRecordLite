@@ -1,1 +1,1 @@
-THIS README INTENTIONALLY LEFT BLANK
+To understand Ruby on Rails better and how it interfaces with the underlying SQL database, I wrote my own subset of ActiveRecord. It features associations such as belongs\_to, has\_many, has\_one\_through. It also features mass assignment.
